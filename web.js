@@ -62,9 +62,11 @@ app.post('/attend', (req, res) => {
 app.get('/attendance-status/:memberId', (req, res) => {
     const memberId = req.params.memberId;
     const currentDate = new Date().toISOString().slice(0, 10);
+    const previousDate = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const collection = db.collection('attend');
 
     // 해당 memberId의 출석체크 상태를 조회합니다.
-    db.collection('attend').findOne({ memberId }, (err, result) => {
+    collection.findOne({ memberId }, (err, result) => {
         if (err) {
             console.error('Error finding attendance status:', err);
             return res.status(500).json({ error: 'Failed to get attendance status.' });
@@ -73,10 +75,10 @@ app.get('/attendance-status/:memberId', (req, res) => {
         // 출석체크 상태를 클라이언트에게 응답합니다.
         if (result) {
             // 연속 출석체크가 실패하였는지를 확인합니다.
-            const hasFailed = result.date !== currentDate && result.attendanceCounter > 0;
+            const hasFailed = result.date !== currentDate && result.attendanceCounter > 0 && result.date !== previousDate;
             if (hasFailed) {
                 // 연속 출석체크가 실패했으므로 출석체크 횟수를 초기화합니다.
-                db.collection('attend').updateOne({ memberId }, { $set: { attendanceCounter: 0 } }, (err, updateResult) => {
+                collection.updateOne({ memberId }, { $set: { attendanceCounter: 0 } }, (err, updateResult) => {
                     if (err) {
                         console.error('Error resetting attendance counter:', err);
                     }
@@ -91,6 +93,7 @@ app.get('/attendance-status/:memberId', (req, res) => {
         }
     });
 });
+
 app.listen(PORT, () => {
     console.log(`Server is running at http://localhost:${PORT}`);
 });
