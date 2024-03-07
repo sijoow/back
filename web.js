@@ -58,39 +58,51 @@ app.post('/attend', (req, res) => {
         }
     });
 });
-
-app.get('/attendance-status/:memberId', (req, res) => {
-    const memberId = req.params.memberId;
+app.post('/attend', (req, res) => {
+    const { memberId } = req.body;
     const currentDate = new Date().toISOString().slice(0, 10);
+    const collection = db.collection('attend');
 
-    // 해당 memberId의 출석체크 상태를 조회합니다.
-    db.collection('attend').findOne({ memberId }, (err, result) => {
+    // 해당 memberId의 최근 출석체크 데이터를 조회합니다.
+    collection.findOne({ memberId }, (err, existingAttendance) => {
         if (err) {
-            console.error('Error finding attendance status:', err);
-            return res.status(500).json({ error: 'Failed to get attendance status.' });
+            console.error('Error finding attendance:', err);
+            return res.status(500).json({ error: 'Server error occurred while checking attendance.' });
         }
 
-        // 출석체크 상태를 클라이언트에게 응답합니다.
-        if (result) {
-            // 연속 출석체크가 실패하였는지를 확인합니다.
-            const hasFailed = result.date !== currentDate && result.attendanceCounter > 0;
-            if (hasFailed) {
-                // 연속 출석체크가 실패했으므로 출석체크 횟수를 초기화합니다.
-                db.collection('attend').updateOne({ memberId }, { $set: { attendanceCounter: 0 } }, (err, updateResult) => {
-                    if (err) {
-                        console.error('Error resetting attendance counter:', err);
-                    }
-                    // 출석체크 횟수를 초기화한 후 응답을 보냅니다.
-                    res.json({ consecutiveAttendance: 0, hasFailed });
-                });
-            } else {
-                res.json({ consecutiveAttendance: result.attendanceCounter, hasFailed });
-            }
+        if (existingAttendance && existingAttendance.date === currentDate) {
+            console.log('User has already attended.');
+            return res.status(400).json({ message: 'User has already attended.', alreadyAttended: true });
         } else {
-            res.json({ consecutiveAttendance: 0, hasFailed: false });
+            let newAttendanceCount;
+            if (existingAttendance) {
+                // 연속 출석체크가 실패하였는지 확인합니다.
+                const lastAttendanceDate = new Date(existingAttendance.date);
+                const currentDate = new Date();
+                // 마지막 출석체크 날짜와 현재 날짜 사이의 차이를 확인합니다.
+                const dateDiff = Math.ceil(Math.abs(currentDate - lastAttendanceDate) / (1000 * 60 * 60 * 24));
+                if (dateDiff > 1) {
+                    // 출석체크를 건너뛴 날이 있으므로 출석체크 횟수를 초기화합니다.
+                    newAttendanceCount = 1;
+                } else {
+                    // 출석체크를 건너뛴 날이 없으므로 출석체크 횟수를 증가시킵니다.
+                    newAttendanceCount = existingAttendance.attendanceCounter + 1;
+                }
+            } else {
+                // 첫 출석체크이므로 출석체크 횟수를 1로 설정합니다.
+                newAttendanceCount = 1;
+            }
+
+            // 출석체크 데이터를 업데이트합니다. 기존 데이터가 없으면 새로운 데이터를 생성합니다.
+            collection.updateOne({ memberId }, { $set: { date: currentDate, attendanceCounter: newAttendanceCount } }, { upsert: true }, (err, result) => {
+                if (err) {
+                    console.error('에러:', err);
+                    return res.status(500).json({ error: 'Failed to save attendance.' });
+                } else {
+                    console.log('에러발생');
+                    res.json({ message: 'Attendance completed.', consecutiveAttendance: newAttendanceCount, attendanceCounter: newAttendanceCount });
+                }
+            });
         }
     });
-});
-app.listen(PORT, () => {
-    console.log(`Server is running at http://localhost:${PORT}`);
 });
