@@ -58,6 +58,7 @@ app.post('/attend', (req, res) => {
         }
     });
 });
+
 app.post('/attend', (req, res) => {
     const { memberId } = req.body;
     const currentDate = new Date().toISOString().slice(0, 10);
@@ -105,4 +106,7 @@ app.post('/attend', (req, res) => {
             });
         }
     });
+});
+app.listen(PORT, () => {
+    console.log(`Server is running at http://localhost:${PORT}`);
 });
